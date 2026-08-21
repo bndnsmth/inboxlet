@@ -1,0 +1,353 @@
+openapi: 3.1.0
+info:
+  title: Inboxlet API
+  version: 0.1.0
+  description: Ephemeral email inboxes for agents and automation.
+servers:
+  - url: https://inbox.example.com
+paths:
+  /v1/health:
+    get:
+      operationId: health
+      responses:
+        "200":
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "503":
+          description: Service is running but required configuration is missing, invalid, or placeholder-only
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /v1/inboxes:
+    post:
+      operationId: createInbox
+      security:
+        - serverApiKey: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ttlSeconds:
+                  type: integer
+                  minimum: 1
+                  description: Inbox lifetime in seconds. Minimum, maximum, and default are deployment-specific.
+                maxMessages:
+                  type: integer
+                  minimum: 1
+                  description: Maximum messages retained by this inbox, bounded by the deployment configuration.
+      responses:
+        "201":
+          description: Inbox created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/InboxStatus"
+                  - type: object
+                    required: [token]
+                    properties:
+                      token: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "500": { $ref: "#/components/responses/InternalError" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+  /v1/inboxes/{inboxId}:
+    parameters:
+      - $ref: "#/components/parameters/InboxId"
+    get:
+      operationId: getInbox
+      security: [{ inboxCapability: [] }]
+      responses:
+        "200":
+          description: Inbox metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InboxStatus" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    delete:
+      operationId: deleteInbox
+      security: [{ inboxCapability: [] }]
+      responses:
+        "200":
+          description: Inbox deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResult"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "500": { $ref: "#/components/responses/InternalError" }
+  /v1/inboxes/{inboxId}/messages:
+    parameters:
+      - $ref: "#/components/parameters/InboxId"
+    get:
+      operationId: readMessages
+      security: [{ inboxCapability: [] }]
+      parameters:
+        - name: after
+          in: query
+          description: Exclusive sequence cursor. Only messages with `seq > after` are returned.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 9007199254740991
+            default: 0
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - name: wait
+          in: query
+          description: Long-poll duration in seconds.
+          schema: { type: integer, minimum: 0, maximum: 25, default: 0 }
+      responses:
+        "200":
+          description: Messages in ascending sequence order
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [messages, nextCursor]
+                properties:
+                  messages:
+                    type: array
+                    items: { $ref: "#/components/schemas/Message" }
+                  nextCursor:
+                    type: integer
+                    minimum: 0
+                    description: Sequence of the last returned message, or the unchanged `after` cursor when empty.
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "500": { $ref: "#/components/responses/InternalError" }
+    post:
+      operationId: sendMessage
+      security: [{ inboxCapability: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to, subject]
+              anyOf:
+                - required: [text]
+                - required: [html]
+              properties:
+                to: { type: string, format: email }
+                subject: { type: string, minLength: 1, maxLength: 500 }
+                text:
+                  type: string
+                  minLength: 1
+                  description: Plain-text body. Text and HTML together are subject to a deployment-specific UTF-8 byte limit.
+                html:
+                  type: string
+                  description: HTML body. Text and HTML together are subject to a deployment-specific UTF-8 byte limit.
+      responses:
+        "201":
+          description: Provider accepted the message
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Message" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "500": { $ref: "#/components/responses/InternalError" }
+        "502": { $ref: "#/components/responses/BadGateway" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+  /v1/inboxes/{inboxId}/messages/{messageId}/reply:
+    parameters:
+      - $ref: "#/components/parameters/InboxId"
+      - name: messageId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      operationId: replyToMessage
+      security: [{ inboxCapability: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              anyOf:
+                - required: [text]
+                - required: [html]
+              properties:
+                text:
+                  type: string
+                  minLength: 1
+                  description: Plain-text body. Text and HTML together are subject to a deployment-specific UTF-8 byte limit.
+                html:
+                  type: string
+                  description: HTML body. Text and HTML together are subject to a deployment-specific UTF-8 byte limit.
+      responses:
+        "201":
+          description: Provider accepted the reply
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Message" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/UnprocessableContent" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "500": { $ref: "#/components/responses/InternalError" }
+        "502": { $ref: "#/components/responses/BadGateway" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+components:
+  securitySchemes:
+    inboxCapability:
+      type: http
+      scheme: bearer
+    serverApiKey:
+      type: http
+      scheme: bearer
+  parameters:
+    InboxId:
+      name: inboxId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-z]+-[a-z]+-[a-z2-7]{10}$"
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema: { type: string, minLength: 1, maxLength: 128 }
+  responses:
+    BadRequest:
+      description: Invalid request, identifier, cursor, or argument
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Unauthorized:
+      description: Required API key or inbox capability was not supplied or accepted
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Forbidden:
+      description: Inbox capability is invalid
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: Inbox or message was not found or has expired
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Conflict:
+      description: Request conflicts with current state or an idempotency key's prior use
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    PayloadTooLarge:
+      description: JSON request body exceeds the endpoint limit
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    UnprocessableContent:
+      description: Message cannot be replied to because it has no valid reply address
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    TooManyRequests:
+      description: Inbox capacity or concurrent waiter limit was reached
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    InternalError:
+      description: Internal service error
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    BadGateway:
+      description: Email provider rejected or failed the outbound delivery
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    ServiceUnavailable:
+      description: Service is not configured, could not allocate an inbox, or has an indeterminate pending delivery
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+    Health:
+      type: object
+      required: [ok, status, service, mailDomain, issues]
+      properties:
+        ok: { type: boolean }
+        status: { type: string, enum: [ok, degraded] }
+        service: { type: string, const: inboxlet }
+        mailDomain: { type: string }
+        issues:
+          type: array
+          items: { type: string }
+    DeleteResult:
+      type: object
+      required: [deleted]
+      properties:
+        deleted: { type: boolean, const: true }
+    InboxStatus:
+      type: object
+      required: [id, address, createdAt, expiresAt, messageCount, maxMessages]
+      properties:
+        id: { type: string }
+        address: { type: string, format: email }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        messageCount: { type: integer, minimum: 0 }
+        maxMessages: { type: integer, minimum: 1 }
+    Attachment:
+      type: object
+      required: [filename, mimeType, size]
+      properties:
+        filename: { type: string }
+        mimeType: { type: string }
+        size: { type: integer, minimum: 0 }
+    Message:
+      type: object
+      required:
+        [id, seq, direction, status, from, to, subject, text, html, rawSize, attachments, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        seq: { type: integer, minimum: 1 }
+        direction: { type: string, enum: [inbound, outbound] }
+        status: { type: string, enum: [received, pending, sent, failed] }
+        from: { type: string }
+        to: { type: string }
+        headerFrom: { type: string }
+        replyTo: { type: string }
+        subject: { type: string }
+        text: { type: string }
+        html: { type: string }
+        rfcMessageId: { type: string }
+        inReplyTo: { type: string }
+        references: { type: string }
+        providerMessageId: { type: string }
+        error: { type: string }
+        rawSize:
+          type: integer
+          minimum: 0
+          description: Raw inbound message size. The accepted maximum is deployment-specific.
+        attachments:
+          type: array
+          items: { $ref: "#/components/schemas/Attachment" }
+        createdAt: { type: string, format: date-time }

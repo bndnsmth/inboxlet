@@ -1,0 +1,7 @@
+# Optional custom domain. Omit to use the generated workers.dev hostname, and
+# set the MCP hostnames below to that workers.dev hostname.
+# WORKER_DOMAIN=inboxlet.example.com
+
+MAIL_DOMAIN=mail.example.com
+MCP_ALLOWED_HOSTNAMES=inboxlet.example.com
+MCP_ALLOWED_ORIGIN_HOSTNAMES=inboxlet.example.com,playground.ai.cloudflare.com

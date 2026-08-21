@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#05101f" />
+    <meta
+      name="description"
+      content="Inboxlet gives agents tiny, disposable email inboxes on Cloudflare. Create, wait, reply, and let them disappear."
+    />
+    <meta property="og:title" content="Inboxlet - tiny email for agents" />
+    <meta
+      property="og:description"
+      content="Ephemeral email identity for agents and automation. Open source and Cloudflare-native."
+    />
+    <meta property="og:image" content="https://inboxlet.dev/avatar.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://inboxlet.dev" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="icon" href="/mark.svg" type="image/svg+xml" />
+    <title>Inboxlet - tiny email for agents</title>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="wordmark" href="#top" aria-label="Inboxlet home">
+        <svg class="wordmark-mark" viewBox="0 0 44 38" aria-hidden="true">
+          <path class="mark-shell" d="M3 13C3 7.5 7.5 3 13 3h12c8.8 0 16 7.2 16 16v15H3V13Z" />
+          <path class="mark-letter" d="M8 14h19v14H8V14Zm1 1 8.5 7L26 15" />
+          <path class="mark-post" d="M33 2h3v20h-3z" />
+          <path class="mark-flag" d="M36 3h8l-2.8 4.5L44 12h-8z" />
+        </svg>
+        inboxlet
+      </a>
+      <nav aria-label="Main navigation">
+        <a href="#how">How it works</a>
+        <a href="#quickstart">Quick start</a>
+        <a href="https://github.com/bndnsmth/inboxlet">GitHub</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero" id="top">
+        <div class="hero-stars" aria-hidden="true"></div>
+        <div class="hero-inner">
+          <div class="hero-copy">
+            <p class="eyebrow intro-item">Cloudflare-native. Agent-ready. Open source.</p>
+            <h1 class="intro-item">Tiny email.<br /><span>Big agent energy.</span></h1>
+            <p class="hero-lede intro-item">
+              Disposable inboxes as a primitive. Create one, catch the message, reply if you need
+              to, then let it vanish.
+            </p>
+            <div class="hero-actions intro-item">
+              <a class="button button-primary" href="#quickstart">Make a little inbox</a>
+              <a class="text-link" href="https://github.com/bndnsmth/inboxlet">
+                Read the source <span aria-hidden="true">-&gt;</span>
+              </a>
+            </div>
+            <ul class="hero-notes intro-item" aria-label="Product highlights">
+              <li>One Durable Object per inbox</li>
+              <li>CLI, TypeScript, and remote MCP</li>
+              <li>Hard-deletes on expiry</li>
+            </ul>
+          </div>
+
+          <figure class="mascot-wrap intro-item">
+            <div class="mascot-orbit" aria-hidden="true">
+              <span class="orbit-dot orbit-dot-one"></span>
+              <span class="orbit-dot orbit-dot-two"></span>
+              <span class="orbit-dot orbit-dot-three"></span>
+            </div>
+            <img
+              class="mascot"
+              src="/avatar.png"
+              width="1536"
+              height="1024"
+              alt="Inboxlet, a smiling tiny mailbox holding an envelope"
+            />
+            <figcaption class="address-ticket">
+              <span class="address-label">Your tiny inbox</span>
+              <code>keen-otter-7k2m4p9x@mail.inboxlet.dev</code>
+              <span class="waiting"><i aria-hidden="true"></i> waiting for mail</span>
+            </figcaption>
+          </figure>
+        </div>
+        <a class="scroll-cue" href="#how" aria-label="Scroll to how it works">
+          <span></span>
+        </a>
+      </section>
+
+      <section class="how-section" id="how">
+        <div class="section-shell">
+          <div class="section-heading reveal">
+            <p class="section-number">01 / LITTLE BY DESIGN</p>
+            <h2>An inbox that<br />leaves no crumbs.</h2>
+            <p>
+              Friendly on the outside. Capability-secured, strongly consistent, and ephemeral
+              underneath.
+            </p>
+          </div>
+
+          <ol class="mail-route" aria-label="Inboxlet workflow">
+            <li class="reveal">
+              <span class="route-number">01</span>
+              <div>
+                <h3>Create</h3>
+                <p>Get a friendly address and a private capability in one API call.</p>
+                <code>inboxlet create --ttl 1h</code>
+              </div>
+            </li>
+            <li class="reveal">
+              <span class="route-number">02</span>
+              <div>
+                <h3>Wait</h3>
+                <p>Pause your workflow until the verification, reply, or notification arrives.</p>
+                <code>inboxlet read --wait 5m</code>
+              </div>
+            </li>
+            <li class="reveal">
+              <span class="route-number">03</span>
+              <div>
+                <h3>Disappear</h3>
+                <p>Delete it now or let its alarm erase every message when time is up.</p>
+                <code>inboxlet delete --yes</code>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="quickstart-section" id="quickstart">
+        <div class="quickstart-glow" aria-hidden="true"></div>
+        <div class="quickstart-shell">
+          <div class="quickstart-intro reveal">
+            <p class="section-number section-number-light">02 / PICK YOUR DOOR</p>
+            <h2>From zero to<br />inbox in a minute.</h2>
+            <p>
+              Deploy your own server, set one API key, and use whichever interface your agent
+              already speaks.
+            </p>
+            <a class="deploy-button" href="https://github.com/bndnsmth/inboxlet">
+              <img
+                src="https://deploy.workers.cloudflare.com/button"
+                alt="Deploy to Cloudflare"
+                width="184"
+                height="39"
+              />
+            </a>
+          </div>
+
+          <div class="code-station reveal">
+            <div class="code-tabs" role="tablist" aria-label="Quick start method">
+              <button
+                class="code-tab is-active"
+                id="tab-cli"
+                type="button"
+                role="tab"
+                aria-selected="true"
+                aria-controls="quickstart-code"
+                data-code="cli"
+              >
+                CLI
+              </button>
+              <button
+                class="code-tab"
+                id="tab-ts"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="quickstart-code"
+                data-code="typescript"
+              >
+                TypeScript
+              </button>
+              <button
+                class="code-tab"
+                id="tab-mcp"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="quickstart-code"
+                data-code="mcp"
+              >
+                MCP
+              </button>
+            </div>
+            <div class="code-window" id="quickstart-code" role="tabpanel" aria-labelledby="tab-cli">
+              <div class="code-toolbar">
+                <span class="code-language">shell</span>
+                <button class="copy-button" type="button">Copy</button>
+              </div>
+              <pre><code></code></pre>
+            </div>
+            <p class="code-note">
+              The server API key creates inboxes. Each inbox gets its own short-lived capability.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="setup-section" id="email-setup">
+        <div class="setup-shell">
+          <div class="setup-heading reveal">
+            <p class="section-number">03 / CONNECT THE PIPES</p>
+            <h2>Give it ears.<br />Give it a voice.</h2>
+            <p>
+              Deploying gets the Worker online. Two Cloudflare email switches connect it to the
+              outside world.
+            </p>
+          </div>
+
+          <ol class="setup-steps" aria-label="Cloudflare email setup">
+            <li class="reveal">
+              <span class="setup-number">01</span>
+              <div>
+                <p class="setup-kicker">Pick a domain</p>
+                <h3>Set the address.</h3>
+                <p>Choose a Cloudflare-managed domain and set <code>MAIL_DOMAIN</code>.</p>
+                <code class="setup-command">mail.yourdomain.com</code>
+              </div>
+            </li>
+            <li class="reveal">
+              <span class="setup-number">02</span>
+              <div>
+                <a
+                  class="setup-kicker setup-product-link"
+                  href="https://developers.cloudflare.com/email-service/configuration/email-routing-addresses/"
+                  aria-label="Cloudflare Email Routing documentation"
+                >
+                  <svg class="cloudflare-icon" viewBox="12 14 25 11" aria-hidden="true">
+                    <path
+                      d="M28.887 24.775 29.01 24.35c.146-.505.092-.972-.154-1.315-.226-.316-.602-.502-1.059-.524l-8.655-.11a.17.17 0 0 1-.136-.073.18.18 0 0 1-.019-.156.22.22 0 0 1 .201-.154l8.736-.11c1.036-.048 2.158-.889 2.551-1.914l.498-1.302a.3.3 0 0 0 .014-.172 5.69 5.69 0 0 0-10.94-.588 2.56 2.56 0 0 0-4.08 1.788c-.032.312-.006.613.066.895a3.64 3.64 0 0 0-3.494 4.163.17.17 0 0 0 .167.146l15.98.002a.21.21 0 0 0 .201-.151Z"
+                    />
+                    <path
+                      d="M31.77 18.788q-.12 0-.24.006a.15.15 0 0 0-.125.1l-.34 1.175c-.147.506-.093.972.153 1.315.226.317.602.502 1.059.524l1.845.11a.17.17 0 0 1 .132.072.18.18 0 0 1 .019.157.22.22 0 0 1-.2.154l-1.918.11c-1.04.048-2.162.889-2.555 1.914l-.139.362a.1.1 0 0 0 .091.139h6.602a.18.18 0 0 0 .17-.127 4.73 4.73 0 0 0-4.554-6.011Z"
+                    />
+                  </svg>
+                  <span>Cloudflare Email Routing</span>
+                  <span aria-hidden="true">-&gt;</span>
+                </a>
+                <h3>Catch every inbox.</h3>
+                <p>Onboard the domain, then send its catch-all rule to your Inboxlet Worker.</p>
+                <code class="setup-command">catch-all -&gt; Worker: inboxlet</code>
+              </div>
+            </li>
+            <li class="reveal">
+              <span class="setup-number">03</span>
+              <div>
+                <a
+                  class="setup-kicker setup-product-link"
+                  href="https://developers.cloudflare.com/email-service/get-started/"
+                  aria-label="Cloudflare Email Sending documentation"
+                >
+                  <svg class="cloudflare-icon" viewBox="12 14 25 11" aria-hidden="true">
+                    <path
+                      d="M28.887 24.775 29.01 24.35c.146-.505.092-.972-.154-1.315-.226-.316-.602-.502-1.059-.524l-8.655-.11a.17.17 0 0 1-.136-.073.18.18 0 0 1-.019-.156.22.22 0 0 1 .201-.154l8.736-.11c1.036-.048 2.158-.889 2.551-1.914l.498-1.302a.3.3 0 0 0 .014-.172 5.69 5.69 0 0 0-10.94-.588 2.56 2.56 0 0 0-4.08 1.788c-.032.312-.006.613.066.895a3.64 3.64 0 0 0-3.494 4.163.17.17 0 0 0 .167.146l15.98.002a.21.21 0 0 0 .201-.151Z"
+                    />
+                    <path
+                      d="M31.77 18.788q-.12 0-.24.006a.15.15 0 0 0-.125.1l-.34 1.175c-.147.506-.093.972.153 1.315.226.317.602.502 1.059.524l1.845.11a.17.17 0 0 1 .132.072.18.18 0 0 1 .019.157.22.22 0 0 1-.2.154l-1.918.11c-1.04.048-2.162.889-2.555 1.914l-.139.362a.1.1 0 0 0 .091.139h6.602a.18.18 0 0 0 .17-.127 4.73 4.73 0 0 0-4.554-6.011Z"
+                    />
+                  </svg>
+                  <span>Cloudflare Email Sending</span>
+                  <span aria-hidden="true">-&gt;</span>
+                </a>
+                <h3>Wire up replies.</h3>
+                <p>Onboard the same domain. The <code>EMAIL</code> binding is already included.</p>
+                <code class="setup-command">EMAIL -&gt; send_email</code>
+              </div>
+            </li>
+          </ol>
+
+          <a
+            class="setup-link reveal"
+            href="https://github.com/bndnsmth/inboxlet#deploy-on-cloudflare"
+          >
+            Read the full setup guide <span aria-hidden="true">-&gt;</span>
+          </a>
+        </div>
+      </section>
+
+      <section class="final-section">
+        <div class="final-stamp reveal" aria-hidden="true">
+          <span>TTL</span>
+          <strong>60m</strong>
+        </div>
+        <div class="final-copy reveal">
+          <p class="section-number">04 / SEND THE AGENT</p>
+          <h2>A little inbox,<br />right when you need one.</h2>
+          <p>
+            Built for sign-ups, verification links, approvals, notifications, and tiny adventures.
+          </p>
+          <div class="final-actions">
+            <a class="button button-dark" href="#quickstart">Start tiny</a>
+            <a class="text-link text-link-dark" href="https://github.com/bndnsmth/inboxlet">
+              Star on GitHub <span aria-hidden="true">-&gt;</span>
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <a class="wordmark wordmark-dark" href="#top">
+        <svg class="wordmark-mark" viewBox="0 0 44 38" aria-hidden="true">
+          <path class="mark-shell" d="M3 13C3 7.5 7.5 3 13 3h12c8.8 0 16 7.2 16 16v15H3V13Z" />
+          <path class="mark-letter" d="M8 14h19v14H8V14Zm1 1 8.5 7L26 15" />
+          <path class="mark-post" d="M33 2h3v20h-3z" />
+          <path class="mark-flag" d="M36 3h8l-2.8 4.5L44 12h-8z" />
+        </svg>
+        inboxlet
+      </a>
+      <p>Tiny email infrastructure for agents.</p>
+      <p>MIT licensed. <span id="year"></span></p>
+    </footer>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

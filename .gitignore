@@ -1,0 +1,14 @@
+node_modules/
+dist/
+site/dist/
+video/out/
+.wrangler/
+.deploy.vars
+.deploy.secrets
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+coverage/
+*.cpuprofile
