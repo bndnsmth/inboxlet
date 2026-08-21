@@ -1,3 +1,5 @@
+import { base64Url } from "./crypto";
+
 const BASE32_ALPHABET = "abcdefghijklmnopqrstuvwxyz234567";
 
 const ADJECTIVES = [
@@ -172,12 +174,7 @@ export function randomInboxId(): string {
 
 export function randomCapability(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
-  let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-
-  return `ibl_${btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "")}`;
+  return `ibl_${base64Url(bytes)}`;
 }
 
 export function inboxIdFromAddress(address: string, domain: string): string | null {

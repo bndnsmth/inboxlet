@@ -58,6 +58,7 @@ test("creates an inbox and sends authenticated requests", async () => {
     to: "person@example.com",
     subject: "Hello",
     html: "<p>Hi</p>",
+    idempotencyKey: "client-send",
   });
 
   assert.equal(requests[0]?.url, "https://api.example/base/v1/inboxes");
@@ -68,7 +69,7 @@ test("creates an inbox and sends authenticated requests", async () => {
   assert.equal(signals[0], controller.signal);
   assert.equal(requests[0]?.headers.get("authorization"), "Bearer create-key");
   assert.equal(requests[1]?.headers.get("authorization"), "Bearer ibl_secret");
-  assert.ok(requests[2]?.headers.get("idempotency-key"));
+  assert.equal(requests[2]?.headers.get("idempotency-key"), "client-send");
   assert.deepEqual(await requests[2]?.json(), {
     to: "person@example.com",
     subject: "Hello",

@@ -9,12 +9,6 @@ import { envInteger, inboxIdFromReference, inboxStub, provisionInbox } from "./i
 import { validatedBodies } from "./message-input";
 import type { OperationResult } from "./protocol";
 
-interface CapabilityContext {
-  digest: ArrayBuffer;
-  id: string;
-  stub: ReturnType<typeof inboxStub>;
-}
-
 function textResult(value: unknown) {
   return {
     content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }],
@@ -33,6 +27,14 @@ function errorResult(error: unknown) {
   };
 }
 
+async function toolResult<T>(action: () => T | Promise<T>) {
+  try {
+    return textResult(await action());
+  } catch (error) {
+    return errorResult(error);
+  }
+}
+
 function unwrap<T>(result: OperationResult<T>): T {
   if (!result.ok) {
     throw new RequestError(result.code, result.message, result.status);
@@ -40,23 +42,13 @@ function unwrap<T>(result: OperationResult<T>): T {
   return result.value;
 }
 
-function capabilityContext(env: Env, inbox: string): Omit<CapabilityContext, "digest"> {
+async function authorizedCapability(env: Env, inbox: string, capability: string) {
   const id = inboxIdFromReference(inbox, env);
   if (!id) {
     throw new RequestError("INVALID_INBOX_ID", "Invalid inbox ID or address");
   }
-  return { id, stub: inboxStub(env, id) };
-}
 
-async function authorizedCapability(
-  env: Env,
-  inbox: string,
-  capability: string,
-): Promise<CapabilityContext> {
-  return {
-    ...capabilityContext(env, inbox),
-    digest: await sha256(capability),
-  };
+  return { stub: inboxStub(env, id), digest: await sha256(capability) };
 }
 
 function waitDuration(value: string): number {
@@ -94,20 +86,15 @@ function createInboxletMcpServer(env: Env): McpServer {
         maxMessages: z.number().int().positive().optional(),
       }),
     },
-    async ({ ttl, maxMessages }) => {
-      try {
-        return textResult(
-          unwrap(
-            await provisionInbox(env, {
-              ...(ttl ? { ttlSeconds: durationToSeconds(ttl as DurationInput) } : {}),
-              ...(maxMessages ? { maxMessages } : {}),
-            }),
-          ),
-        );
-      } catch (error) {
-        return errorResult(error);
-      }
-    },
+    async ({ ttl, maxMessages }) =>
+      toolResult(async () =>
+        unwrap(
+          await provisionInbox(env, {
+            ...(ttl ? { ttlSeconds: durationToSeconds(ttl as DurationInput) } : {}),
+            ...(maxMessages ? { maxMessages } : {}),
+          }),
+        ),
+      ),
   );
 
   server.registerTool(
@@ -117,14 +104,11 @@ function createInboxletMcpServer(env: Env): McpServer {
       inputSchema: z.object(capabilityFields),
       annotations: { readOnlyHint: true },
     },
-    async ({ inbox, capability }) => {
-      try {
+    async ({ inbox, capability }) =>
+      toolResult(async () => {
         const auth = await authorizedCapability(env, inbox, capability);
-        return textResult(unwrap(await auth.stub.status(auth.digest)));
-      } catch (error) {
-        return errorResult(error);
-      }
-    },
+        return unwrap(await auth.stub.status(auth.digest));
+      }),
   );
 
   server.registerTool(
@@ -138,14 +122,11 @@ function createInboxletMcpServer(env: Env): McpServer {
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ inbox, capability, after, limit }) => {
-      try {
+    async ({ inbox, capability, after, limit }) =>
+      toolResult(async () => {
         const auth = await authorizedCapability(env, inbox, capability);
-        return textResult(unwrap(await auth.stub.read(auth.digest, after, limit, 0)));
-      } catch (error) {
-        return errorResult(error);
-      }
-    },
+        return unwrap(await auth.stub.read(auth.digest, after, limit, 0));
+      }),
   );
 
   server.registerTool(
@@ -163,8 +144,8 @@ function createInboxletMcpServer(env: Env): McpServer {
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ inbox, capability, after, timeout }, context) => {
-      try {
+    async ({ inbox, capability, after, timeout }, context) =>
+      toolResult(async () => {
         const auth = await authorizedCapability(env, inbox, capability);
         const deadline = Date.now() + waitDuration(timeout) * 1_000;
 
@@ -178,15 +159,12 @@ function createInboxletMcpServer(env: Env): McpServer {
           const result = unwrap(await auth.stub.read(auth.digest, after, 1, waitMilliseconds));
           const message = result.messages[0];
           if (message) {
-            return textResult(message);
+            return message;
           }
         }
 
         throw new RequestError("WAIT_TIMEOUT", "Timed out waiting for an inbox message", 408);
-      } catch (error) {
-        return errorResult(error);
-      }
-    },
+      }),
   );
 
   server.registerTool(
@@ -202,23 +180,18 @@ function createInboxletMcpServer(env: Env): McpServer {
         idempotencyKey: z.string().min(1).max(128).optional(),
       }),
     },
-    async ({ inbox, capability, to, subject, text, html, idempotencyKey }) => {
-      try {
+    async ({ inbox, capability, to, subject, text, html, idempotencyKey }) =>
+      toolResult(async () => {
         const auth = await authorizedCapability(env, inbox, capability);
-        return textResult(
-          unwrap(
-            await auth.stub.send(auth.digest, {
-              to: requireEmail(to, "to"),
-              subject: stringField(subject, "subject", { min: 1, max: 500 }),
-              ...validatedBodies({ text, html }, envInteger(env.MAX_BODY_BYTES, "MAX_BODY_BYTES")),
-              idempotencyKey: validateIdempotencyKey(idempotencyKey),
-            }),
-          ),
+        return unwrap(
+          await auth.stub.send(auth.digest, {
+            to: requireEmail(to, "to"),
+            subject: stringField(subject, "subject", { min: 1, max: 500 }),
+            ...validatedBodies({ text, html }, envInteger(env.MAX_BODY_BYTES, "MAX_BODY_BYTES")),
+            idempotencyKey: validateIdempotencyKey(idempotencyKey),
+          }),
         );
-      } catch (error) {
-        return errorResult(error);
-      }
-    },
+      }),
   );
 
   server.registerTool(
@@ -233,22 +206,17 @@ function createInboxletMcpServer(env: Env): McpServer {
         idempotencyKey: z.string().min(1).max(128).optional(),
       }),
     },
-    async ({ inbox, capability, messageId, text, html, idempotencyKey }) => {
-      try {
+    async ({ inbox, capability, messageId, text, html, idempotencyKey }) =>
+      toolResult(async () => {
         const auth = await authorizedCapability(env, inbox, capability);
-        return textResult(
-          unwrap(
-            await auth.stub.reply(auth.digest, {
-              messageId,
-              ...validatedBodies({ text, html }, envInteger(env.MAX_BODY_BYTES, "MAX_BODY_BYTES")),
-              idempotencyKey: validateIdempotencyKey(idempotencyKey),
-            }),
-          ),
+        return unwrap(
+          await auth.stub.reply(auth.digest, {
+            messageId,
+            ...validatedBodies({ text, html }, envInteger(env.MAX_BODY_BYTES, "MAX_BODY_BYTES")),
+            idempotencyKey: validateIdempotencyKey(idempotencyKey),
+          }),
         );
-      } catch (error) {
-        return errorResult(error);
-      }
-    },
+      }),
   );
 
   server.registerTool(
@@ -261,14 +229,11 @@ function createInboxletMcpServer(env: Env): McpServer {
       }),
       annotations: { destructiveHint: true, idempotentHint: true },
     },
-    async ({ inbox, capability }) => {
-      try {
+    async ({ inbox, capability }) =>
+      toolResult(async () => {
         const auth = await authorizedCapability(env, inbox, capability);
-        return textResult(unwrap(await auth.stub.delete(auth.digest)));
-      } catch (error) {
-        return errorResult(error);
-      }
-    },
+        return unwrap(await auth.stub.delete(auth.digest));
+      }),
   );
 
   return server;

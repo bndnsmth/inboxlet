@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
-import type { InboxAttachment, InboxMessage, InboxStatus } from "../../src/types";
-import { digestBase64Url, secureDigestEqual, sha256 } from "./crypto";
+import type { InboxAttachment, InboxMessage, InboxStatus, ReadInboxResult } from "../../src/types";
+import { secureDigestEqual } from "./crypto";
 import type {
   InboundMessageInput,
   InboxStatusResult,
@@ -9,7 +9,6 @@ import type {
   MessagesResult,
   OperationResult,
   OutboundMessageInput,
-  ReadMessagesResult,
   ReplyInput,
 } from "./protocol";
 import { validEmail } from "./http";
@@ -46,7 +45,6 @@ type MessageRow = {
   attachmentsJson: string;
   createdAt: number;
   idempotencyKey: string | null;
-  requestFingerprint: string | null;
 };
 
 type ReplyTargetRow = {
@@ -125,90 +123,76 @@ function enabled(value: string): boolean {
   return value === "true";
 }
 
+function isSameDelivery(
+  row: MessageRow,
+  input: OutboundMessageInput,
+  thread: { inReplyTo: string; references: string },
+): boolean {
+  return (
+    row.toAddress === input.to &&
+    row.subject === input.subject &&
+    row.textBody === input.text &&
+    row.htmlBody === input.html &&
+    row.inReplyTo === thread.inReplyTo &&
+    row.referencesHeader === thread.references
+  );
+}
+
 export class InboxObject extends DurableObject<Env> {
   private readonly waiters = new Set<() => void>();
   private inFlightDeliveries = 0;
-  private initialized = false;
-  private purged = false;
+  private deleted = false;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    void ctx.blockConcurrencyWhile(async () => {
-      this.initialized = (await ctx.storage.get<boolean>("initialized")) ?? false;
-      if (this.initialized) {
-        this.migrate();
-      }
-    });
+    this.createSchema();
   }
 
-  private migrate(): void {
+  private createSchema(): void {
     this.ctx.storage.sql.exec(`
-      CREATE TABLE IF NOT EXISTS _sql_schema_migrations (
-        id INTEGER PRIMARY KEY,
-        applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+      CREATE TABLE IF NOT EXISTS inbox_meta (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        inbox_id TEXT NOT NULL,
+        address TEXT NOT NULL,
+        token_digest BLOB NOT NULL,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        next_seq INTEGER NOT NULL DEFAULT 1 CHECK (next_seq > 0),
+        message_count INTEGER NOT NULL DEFAULT 0 CHECK (message_count >= 0),
+        max_messages INTEGER NOT NULL CHECK (max_messages > 0)
       );
+      CREATE TABLE IF NOT EXISTS messages (
+        id TEXT PRIMARY KEY,
+        seq INTEGER NOT NULL UNIQUE,
+        direction TEXT NOT NULL CHECK (direction IN ('inbound', 'outbound')),
+        status TEXT NOT NULL CHECK (status IN ('received', 'pending', 'sent', 'failed')),
+        from_address TEXT NOT NULL,
+        to_address TEXT NOT NULL,
+        header_from TEXT,
+        reply_to TEXT,
+        subject TEXT NOT NULL,
+        text_body TEXT NOT NULL,
+        html_body TEXT NOT NULL,
+        rfc_message_id TEXT,
+        in_reply_to TEXT,
+        references_header TEXT,
+        provider_message_id TEXT,
+        error TEXT,
+        raw_size INTEGER NOT NULL DEFAULT 0 CHECK (raw_size >= 0),
+        attachments_json TEXT NOT NULL DEFAULT '[]',
+        idempotency_key TEXT,
+        dedupe_key TEXT,
+        created_at INTEGER NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_idempotency_key
+        ON messages(idempotency_key) WHERE idempotency_key IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_dedupe_key
+        ON messages(dedupe_key) WHERE dedupe_key IS NOT NULL;
     `);
-    const version = this.ctx.storage.sql
-      .exec<{ version: number }>(
-        "SELECT COALESCE(MAX(id), 0) AS version FROM _sql_schema_migrations",
-      )
-      .one().version;
-
-    if (version < 1) {
-      this.ctx.storage.sql.exec(`
-        CREATE TABLE inbox_meta (
-          id INTEGER PRIMARY KEY CHECK (id = 1),
-          inbox_id TEXT NOT NULL UNIQUE,
-          address TEXT NOT NULL UNIQUE,
-          token_digest BLOB NOT NULL,
-          created_at INTEGER NOT NULL,
-          expires_at INTEGER NOT NULL,
-          next_seq INTEGER NOT NULL DEFAULT 1 CHECK (next_seq > 0),
-          message_count INTEGER NOT NULL DEFAULT 0 CHECK (message_count >= 0),
-          max_messages INTEGER NOT NULL CHECK (max_messages > 0)
-        );
-        CREATE TABLE messages (
-          id TEXT PRIMARY KEY,
-          seq INTEGER NOT NULL UNIQUE,
-          direction TEXT NOT NULL CHECK (direction IN ('inbound', 'outbound')),
-          status TEXT NOT NULL CHECK (status IN ('received', 'pending', 'sent', 'failed')),
-          from_address TEXT NOT NULL,
-          to_address TEXT NOT NULL,
-          header_from TEXT,
-          reply_to TEXT,
-          subject TEXT NOT NULL,
-          text_body TEXT NOT NULL,
-          html_body TEXT NOT NULL,
-          rfc_message_id TEXT,
-          in_reply_to TEXT,
-          references_header TEXT,
-          provider_message_id TEXT,
-          error TEXT,
-          raw_size INTEGER NOT NULL DEFAULT 0 CHECK (raw_size >= 0),
-          attachments_json TEXT NOT NULL DEFAULT '[]',
-          idempotency_key TEXT,
-          dedupe_key TEXT,
-          created_at INTEGER NOT NULL
-        );
-        CREATE UNIQUE INDEX idx_messages_idempotency_key
-          ON messages(idempotency_key) WHERE idempotency_key IS NOT NULL;
-        CREATE UNIQUE INDEX idx_messages_dedupe_key
-          ON messages(dedupe_key) WHERE dedupe_key IS NOT NULL;
-        CREATE INDEX idx_messages_seq ON messages(seq);
-        INSERT INTO _sql_schema_migrations (id) VALUES (1);
-      `);
-    }
-
-    if (version < 2) {
-      this.ctx.storage.sql.exec(`
-        ALTER TABLE messages ADD COLUMN request_fingerprint TEXT;
-        INSERT INTO _sql_schema_migrations (id) VALUES (2);
-      `);
-    }
   }
 
   private meta(): MetaRow | undefined {
-    if (!this.initialized || this.purged) {
+    if (this.deleted) {
       return undefined;
     }
     return this.ctx.storage.sql
@@ -260,19 +244,26 @@ export class InboxObject extends DurableObject<Env> {
       rfc_message_id AS rfcMessageId, in_reply_to AS inReplyTo,
       references_header AS referencesHeader, provider_message_id AS providerMessageId,
       error, raw_size AS rawSize, attachments_json AS attachmentsJson,
-      created_at AS createdAt, idempotency_key AS idempotencyKey,
-      request_fingerprint AS requestFingerprint FROM messages`;
+      created_at AS createdAt, idempotency_key AS idempotencyKey FROM messages`;
   }
 
-  private nextSequence(): number {
-    return this.ctx.storage.sql
-      .exec<{ seq: number }>(`
+  private storeMessage(insert: (seq: number) => void): number | undefined {
+    return this.ctx.storage.transactionSync(() => {
+      const reservation = this.ctx.storage.sql
+        .exec<{ seq: number }>(`
         UPDATE inbox_meta
         SET next_seq = next_seq + 1, message_count = message_count + 1
-        WHERE id = 1
+        WHERE id = 1 AND message_count < max_messages
         RETURNING next_seq - 1 AS seq
       `)
-      .one().seq;
+        .toArray()[0];
+      if (!reservation) {
+        return undefined;
+      }
+
+      insert(reservation.seq);
+      return reservation.seq;
+    });
   }
 
   private notifyWaiters(): void {
@@ -302,8 +293,7 @@ export class InboxObject extends DurableObject<Env> {
       return false;
     }
 
-    this.initialized = false;
-    this.purged = true;
+    this.deleted = true;
     this.notifyWaiters();
     await this.ctx.storage.deleteAll();
     await this.ctx.storage.deleteAlarm();
@@ -311,11 +301,10 @@ export class InboxObject extends DurableObject<Env> {
   }
 
   async initialize(input: InitializeInboxInput): Promise<InboxStatusResult> {
-    if (this.initialized || this.purged) {
+    if (this.deleted || this.meta()) {
       return failure(409, "INBOX_EXISTS", "Inbox identifier is already in use");
     }
 
-    this.migrate();
     this.ctx.storage.sql.exec(
       `INSERT INTO inbox_meta (
         id, inbox_id, address, token_digest, created_at, expires_at, max_messages
@@ -327,16 +316,19 @@ export class InboxObject extends DurableObject<Env> {
       input.expiresAt,
       input.maxMessages,
     );
-    this.initialized = true;
-    await Promise.all([
-      this.ctx.storage.put("initialized", true),
-      this.ctx.storage.setAlarm(input.expiresAt),
-    ]);
-    const meta = this.meta();
-    if (!meta) {
-      return failure(500, "INITIALIZATION_FAILED", "Inbox initialization failed");
-    }
-    return { ok: true, value: publicStatus(meta) };
+    await this.ctx.storage.setAlarm(input.expiresAt);
+
+    return {
+      ok: true,
+      value: {
+        id: input.id,
+        address: input.address,
+        createdAt: new Date(input.createdAt).toISOString(),
+        expiresAt: new Date(input.expiresAt).toISOString(),
+        messageCount: 0,
+        maxMessages: input.maxMessages,
+      },
+    };
   }
 
   async status(tokenDigest: ArrayBuffer): Promise<InboxStatusResult> {
@@ -371,7 +363,7 @@ export class InboxObject extends DurableObject<Env> {
     return { ok: true, value: result };
   }
 
-  private readRows(after: number, limit: number): ReadMessagesResult {
+  private readRows(after: number, limit: number): ReadInboxResult {
     const rows = this.ctx.storage.sql
       .exec<MessageRow>(
         `${this.messageSelect()} WHERE seq > ? ORDER BY seq ASC LIMIT ?`,
@@ -395,33 +387,34 @@ export class InboxObject extends DurableObject<Env> {
     if (duplicate) {
       return { ok: true, value: publicMessage(duplicate) };
     }
-    if (meta.messageCount >= meta.maxMessages) {
+    const seq = this.storeMessage((sequence) => {
+      this.ctx.storage.sql.exec(
+        `INSERT INTO messages (
+          id, seq, direction, status, from_address, to_address, header_from, reply_to,
+          subject, text_body, html_body, rfc_message_id, references_header,
+          raw_size, attachments_json, dedupe_key, created_at
+        ) VALUES (?, ?, 'inbound', 'received', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        input.id,
+        sequence,
+        input.from,
+        input.to,
+        input.headerFrom,
+        input.replyTo,
+        input.subject,
+        input.text,
+        input.html,
+        input.rfcMessageId,
+        input.references,
+        input.rawSize,
+        JSON.stringify(input.attachments),
+        input.dedupeKey,
+        input.createdAt,
+      );
+    });
+    if (seq === undefined) {
       return failure(429, "INBOX_FULL", "Inbox message limit reached");
     }
 
-    const seq = this.nextSequence();
-    this.ctx.storage.sql.exec(
-      `INSERT INTO messages (
-        id, seq, direction, status, from_address, to_address, header_from, reply_to,
-        subject, text_body, html_body, rfc_message_id, references_header,
-        raw_size, attachments_json, dedupe_key, created_at
-      ) VALUES (?, ?, 'inbound', 'received', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      input.id,
-      seq,
-      input.from,
-      input.to,
-      input.headerFrom,
-      input.replyTo,
-      input.subject,
-      input.text,
-      input.html,
-      input.rfcMessageId,
-      input.references,
-      input.rawSize,
-      JSON.stringify(input.attachments),
-      input.dedupeKey,
-      input.createdAt,
-    );
     this.notifyWaiters();
     const row = this.messageById(input.id);
     return row
@@ -492,21 +485,9 @@ export class InboxObject extends DurableObject<Env> {
     input: OutboundMessageInput,
     thread: { inReplyTo: string; references: string } = { inReplyTo: "", references: "" },
   ): Promise<MessageResult> {
-    const requestFingerprint = digestBase64Url(
-      await sha256(
-        JSON.stringify([
-          input.to,
-          input.subject,
-          input.text,
-          input.html,
-          thread.inReplyTo,
-          thread.references,
-        ]),
-      ),
-    );
     const existing = this.messageByIdempotencyKey(input.idempotencyKey);
     if (existing) {
-      if (existing.requestFingerprint !== requestFingerprint) {
+      if (!isSameDelivery(existing, input, thread)) {
         return failure(
           409,
           "IDEMPOTENCY_KEY_REUSED",
@@ -526,32 +507,32 @@ export class InboxObject extends DurableObject<Env> {
       }
       return failure(500, "INVALID_DELIVERY_STATE", "Outbound delivery has invalid state");
     }
-    if (meta.messageCount >= meta.maxMessages) {
-      return failure(429, "INBOX_FULL", "Inbox message limit reached");
-    }
 
     const id = crypto.randomUUID();
-    const seq = this.nextSequence();
     const createdAt = Date.now();
-    this.ctx.storage.sql.exec(
-      `INSERT INTO messages (
-        id, seq, direction, status, from_address, to_address, subject,
-        text_body, html_body, in_reply_to, references_header,
-        raw_size, attachments_json, idempotency_key, request_fingerprint, created_at
-      ) VALUES (?, ?, 'outbound', 'pending', ?, ?, ?, ?, ?, ?, ?, 0, '[]', ?, ?, ?)`,
-      id,
-      seq,
-      meta.address,
-      input.to,
-      input.subject,
-      input.text,
-      input.html,
-      thread.inReplyTo,
-      thread.references,
-      input.idempotencyKey,
-      requestFingerprint,
-      createdAt,
-    );
+    const seq = this.storeMessage((sequence) => {
+      this.ctx.storage.sql.exec(
+        `INSERT INTO messages (
+          id, seq, direction, status, from_address, to_address, subject,
+          text_body, html_body, in_reply_to, references_header,
+          raw_size, attachments_json, idempotency_key, created_at
+        ) VALUES (?, ?, 'outbound', 'pending', ?, ?, ?, ?, ?, ?, ?, 0, '[]', ?, ?)`,
+        id,
+        sequence,
+        meta.address,
+        input.to,
+        input.subject,
+        input.text,
+        input.html,
+        thread.inReplyTo,
+        thread.references,
+        input.idempotencyKey,
+        createdAt,
+      );
+    });
+    if (seq === undefined) {
+      return failure(429, "INBOX_FULL", "Inbox message limit reached");
+    }
 
     this.inFlightDeliveries += 1;
     try {
@@ -612,6 +593,7 @@ export class InboxObject extends DurableObject<Env> {
     if (this.inFlightDeliveries > 0) {
       return failure(409, "INBOX_BUSY", "Inbox has an email delivery in progress");
     }
+
     await this.purge();
     return { ok: true, value: { deleted: true } };
   }

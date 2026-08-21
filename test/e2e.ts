@@ -230,6 +230,25 @@ try {
 
   await inbox.delete();
   await assert.rejects(inbox.status());
+
+  const limitedInbox = await Inbox.create({
+    endpoint: origin,
+    apiKey: createToken,
+    ttl: 60,
+    maxMessages: 1,
+  });
+  const deliveries = await Promise.allSettled([
+    limitedInbox.send({ to: "one@example.com", subject: "One", text: "One" }),
+    limitedInbox.send({ to: "two@example.com", subject: "Two", text: "Two" }),
+  ]);
+
+  assert.equal(deliveries.filter((result) => result.status === "fulfilled").length, 1);
+  const rejected = deliveries.find((result) => result.status === "rejected");
+  assert.ok(rejected && rejected.reason instanceof Error);
+  assert.equal("code" in rejected.reason ? rejected.reason.code : undefined, "INBOX_FULL");
+  assert.equal((await limitedInbox.status()).messageCount, 1);
+  await limitedInbox.delete();
+
   console.log("Inboxlet local end-to-end test passed");
 } finally {
   wrangler.kill("SIGTERM");
