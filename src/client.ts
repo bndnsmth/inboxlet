@@ -158,17 +158,7 @@ export class Inbox {
     }
 
     const created = (await response.json()) as CreateResponse;
-    return new Inbox(
-      {
-        id: created.id,
-        address: created.address,
-        token: created.token,
-        createdAt: created.createdAt,
-        expiresAt: created.expiresAt,
-        endpoint,
-      },
-      { fetch: fetchImplementation },
-    );
+    return new Inbox({ ...created, endpoint }, { fetch: fetchImplementation });
   }
 
   static from(credentials: InboxCredentials, options: InboxClientOptions = {}): Inbox {
@@ -274,6 +264,7 @@ export class Inbox {
     input: SendMessageInput,
     options: { signal?: AbortSignal } = {},
   ): Promise<InboxMessage> {
+    const { idempotencyKey, ...body } = input;
     const message = await this.request<InboxMessage>(
       `v1/inboxes/${encodeURIComponent(this.id)}/messages`,
       {
@@ -281,9 +272,9 @@ export class Inbox {
         signal: options.signal,
         headers: {
           "content-type": "application/json",
-          "idempotency-key": input.idempotencyKey ?? crypto.randomUUID(),
+          "idempotency-key": idempotencyKey ?? crypto.randomUUID(),
         },
-        body: JSON.stringify(input),
+        body: JSON.stringify(body),
       },
     );
     this.cursor = Math.max(this.cursor, message.seq);
@@ -296,6 +287,7 @@ export class Inbox {
     options: { signal?: AbortSignal } = {},
   ): Promise<InboxMessage> {
     const messageId = typeof message === "string" ? message : message.id;
+    const { idempotencyKey, ...body } = input;
     const reply = await this.request<InboxMessage>(
       `v1/inboxes/${encodeURIComponent(this.id)}/messages/${encodeURIComponent(messageId)}/reply`,
       {
@@ -303,9 +295,9 @@ export class Inbox {
         signal: options.signal,
         headers: {
           "content-type": "application/json",
-          "idempotency-key": input.idempotencyKey ?? crypto.randomUUID(),
+          "idempotency-key": idempotencyKey ?? crypto.randomUUID(),
         },
-        body: JSON.stringify(input),
+        body: JSON.stringify(body),
       },
     );
     this.cursor = Math.max(this.cursor, reply.seq);

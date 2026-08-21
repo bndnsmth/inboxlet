@@ -1,7 +1,7 @@
 import PostalMime from "postal-mime";
 import type { InboxAttachment } from "../../src/types";
 import { htmlToPlainText } from "./body";
-import { digestBase64Url, secureTokenEqual, sha256 } from "./crypto";
+import { base64Url, secureTokenEqual, sha256 } from "./crypto";
 import {
   apiError,
   bearer,
@@ -45,6 +45,16 @@ function examplePlaceholder(hostname: string): boolean {
   return /(^|\.)example(?:\.(?:com|net|org))?$/i.test(hostname);
 }
 
+function configuredInteger(issues: string[], name: string, value: string): number | undefined {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    issues.push(`${name} must be a positive integer`);
+    return undefined;
+  }
+
+  return parsed;
+}
+
 function hostnameConfigurationIssues(name: string, value: string, single = false): string[] {
   if (single && value !== value.trim()) {
     return [`${name} must not contain leading or trailing whitespace`];
@@ -79,49 +89,39 @@ function configurationIssues(env: Env): string[] {
   ];
   if (!env.API_KEY?.trim()) issues.push("API_KEY is not configured");
 
-  const limits = [
-    ["MIN_TTL_SECONDS", env.MIN_TTL_SECONDS],
-    ["DEFAULT_TTL_SECONDS", env.DEFAULT_TTL_SECONDS],
-    ["MAX_TTL_SECONDS", env.MAX_TTL_SECONDS],
-    ["DEFAULT_MAX_MESSAGES", env.DEFAULT_MAX_MESSAGES],
-    ["MAX_MESSAGES", env.MAX_MESSAGES],
-    ["MAX_RAW_BYTES", env.MAX_RAW_BYTES],
-    ["MAX_BODY_BYTES", env.MAX_BODY_BYTES],
-  ] as const;
-  const values = new Map<string, number>();
-  for (const [name, raw] of limits) {
-    const value = Number(raw);
-    if (!Number.isSafeInteger(value) || value <= 0) {
-      issues.push(`${name} must be a positive integer`);
-    } else {
-      values.set(name, value);
-    }
-  }
-  const minTtl = values.get("MIN_TTL_SECONDS");
-  const defaultTtl = values.get("DEFAULT_TTL_SECONDS");
-  const maxTtl = values.get("MAX_TTL_SECONDS");
+  const minTtl = configuredInteger(issues, "MIN_TTL_SECONDS", env.MIN_TTL_SECONDS);
+  const defaultTtl = configuredInteger(issues, "DEFAULT_TTL_SECONDS", env.DEFAULT_TTL_SECONDS);
+  const maxTtl = configuredInteger(issues, "MAX_TTL_SECONDS", env.MAX_TTL_SECONDS);
+
   if (minTtl && defaultTtl && maxTtl && !(minTtl <= defaultTtl && defaultTtl <= maxTtl)) {
     issues.push("DEFAULT_TTL_SECONDS must be between MIN_TTL_SECONDS and MAX_TTL_SECONDS");
   }
-  const defaultMessages = values.get("DEFAULT_MAX_MESSAGES");
-  const maxMessages = values.get("MAX_MESSAGES");
+
+  const defaultMessages = configuredInteger(
+    issues,
+    "DEFAULT_MAX_MESSAGES",
+    env.DEFAULT_MAX_MESSAGES,
+  );
+  const maxMessages = configuredInteger(issues, "MAX_MESSAGES", env.MAX_MESSAGES);
+
   if (defaultMessages && maxMessages && defaultMessages > maxMessages) {
     issues.push("DEFAULT_MAX_MESSAGES must not exceed MAX_MESSAGES");
   }
-  const rawBytes = values.get("MAX_RAW_BYTES");
-  const bodyBytes = values.get("MAX_BODY_BYTES");
+
+  const rawBytes = configuredInteger(issues, "MAX_RAW_BYTES", env.MAX_RAW_BYTES);
+  const bodyBytes = configuredInteger(issues, "MAX_BODY_BYTES", env.MAX_BODY_BYTES);
+
   if (rawBytes && bodyBytes && bodyBytes > rawBytes) {
     issues.push("MAX_BODY_BYTES must not exceed MAX_RAW_BYTES");
   }
-  for (const [name, value] of [
-    ["ENABLE_TEST_INGRESS", env.ENABLE_TEST_INGRESS],
-    ["MOCK_EMAIL", env.MOCK_EMAIL],
-  ] as const) {
-    const configured = String(value);
-    if (configured !== "true" && configured !== "false") {
-      issues.push(`${name} must be true or false`);
-    }
+
+  if (!/^(?:true|false)$/.test(env.ENABLE_TEST_INGRESS)) {
+    issues.push("ENABLE_TEST_INGRESS must be true or false");
   }
+  if (!/^(?:true|false)$/.test(env.MOCK_EMAIL)) {
+    issues.push("MOCK_EMAIL must be true or false");
+  }
+
   return issues;
 }
 
@@ -131,11 +131,17 @@ function operationResponse<T>(result: OperationResult<T>, successStatus = 200): 
     : apiError(result.code, result.message, result.status);
 }
 
-async function tokenDigest(request: Request): Promise<ArrayBuffer | Response> {
+async function inboxCapability(request: Request, env: Env, inboxId: string) {
+  if (!INBOX_ID_PATTERN.test(inboxId)) {
+    throw new RequestError("INVALID_INBOX_ID", "Invalid inbox identifier", 400);
+  }
+
   const token = bearer(request);
-  return token
-    ? sha256(token)
-    : apiError("MISSING_CAPABILITY", "Missing inbox capability token", 401);
+  if (!token) {
+    throw new RequestError("MISSING_CAPABILITY", "Missing inbox capability token", 401);
+  }
+
+  return { digest: await sha256(token), stub: inboxStub(env, inboxId) };
 }
 
 async function creationAllowed(request: Request, env: Env): Promise<boolean> {
@@ -235,14 +241,8 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
   const inboxMatch = /^\/v1\/inboxes\/([^/]+)$/.exec(url.pathname);
   if (inboxMatch) {
     const inboxId = inboxMatch[1] ?? "";
-    if (!INBOX_ID_PATTERN.test(inboxId)) {
-      return apiError("INVALID_INBOX_ID", "Invalid inbox identifier", 400);
-    }
-    const digest = await tokenDigest(request);
-    if (digest instanceof Response) {
-      return digest;
-    }
-    const stub = inboxStub(env, inboxId);
+    const { digest, stub } = await inboxCapability(request, env, inboxId);
+
     if (request.method === "GET") {
       return operationResponse(await stub.status(digest));
     }
@@ -255,14 +255,7 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
   const messagesMatch = /^\/v1\/inboxes\/([^/]+)\/messages$/.exec(url.pathname);
   if (messagesMatch) {
     const inboxId = messagesMatch[1] ?? "";
-    if (!INBOX_ID_PATTERN.test(inboxId)) {
-      return apiError("INVALID_INBOX_ID", "Invalid inbox identifier", 400);
-    }
-    const digest = await tokenDigest(request);
-    if (digest instanceof Response) {
-      return digest;
-    }
-    const stub = inboxStub(env, inboxId);
+    const { digest, stub } = await inboxCapability(request, env, inboxId);
 
     if (request.method === "GET") {
       const after = parseCursor(url, "after", 0, 0, Number.MAX_SAFE_INTEGER);
@@ -291,20 +284,17 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
   if (replyMatch) {
     const inboxId = replyMatch[1] ?? "";
     const messageId = replyMatch[2] ?? "";
-    if (!INBOX_ID_PATTERN.test(inboxId)) {
-      return apiError("INVALID_INBOX_ID", "Invalid inbox identifier", 400);
-    }
+
     if (request.method !== "POST") {
       return apiError("METHOD_NOT_ALLOWED", "Method not allowed", 405);
     }
-    const digest = await tokenDigest(request);
-    if (digest instanceof Response) {
-      return digest;
-    }
+
+    const { digest, stub } = await inboxCapability(request, env, inboxId);
     const body = await readJsonRecord(request, 550 * 1024);
     const bodies = validatedBodies(body, envInteger(env.MAX_BODY_BYTES, "MAX_BODY_BYTES"));
+
     return operationResponse(
-      await inboxStub(env, inboxId).reply(digest, {
+      await stub.reply(digest, {
         messageId,
         ...bodies,
         idempotencyKey: idempotencyKey(request),
@@ -318,18 +308,15 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
     if (!enabled(env.ENABLE_TEST_INGRESS)) {
       return apiError("NOT_FOUND", "Not found", 404);
     }
+
     const inboxId = testMatch[1] ?? "";
-    if (!INBOX_ID_PATTERN.test(inboxId)) {
-      return apiError("INVALID_INBOX_ID", "Invalid inbox identifier", 400);
-    }
-    const digest = await tokenDigest(request);
-    if (digest instanceof Response) {
-      return digest;
-    }
-    const authorized = await inboxStub(env, inboxId).status(digest);
+    const { digest, stub } = await inboxCapability(request, env, inboxId);
+    const authorized = await stub.status(digest);
+
     if (!authorized.ok) {
       return operationResponse(authorized);
     }
+
     const body = await readJsonRecord(request);
     const from = requireEmail(body.from, "from");
     const { text } = validatedBodies(body, envInteger(env.MAX_BODY_BYTES, "MAX_BODY_BYTES"));
@@ -349,7 +336,8 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
       attachments: [],
       createdAt: Date.now(),
     };
-    return operationResponse(await inboxStub(env, inboxId).receive(input), 201);
+
+    return operationResponse(await stub.receive(input), 201);
   }
 
   return apiError("NOT_FOUND", "Not found", 404);
@@ -421,7 +409,7 @@ export default {
         }));
       const result = await stub.receive({
         id: crypto.randomUUID(),
-        dedupeKey: digestBase64Url(await sha256(raw)),
+        dedupeKey: base64Url(await sha256(raw)),
         from: message.from.toLowerCase(),
         to: message.to.toLowerCase(),
         headerFrom: parsed.from?.address?.toLowerCase() || message.from.toLowerCase(),

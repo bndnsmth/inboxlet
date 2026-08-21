@@ -1,4 +1,4 @@
-import type { InboxAttachment, InboxMessage, InboxStatus } from "../../src/types";
+import type { InboxAttachment, InboxMessage, InboxStatus, ReadInboxResult } from "../../src/types";
 
 export type OperationResult<T> =
   | { ok: true; value: T }
@@ -45,11 +45,6 @@ export interface ReplyInput {
   idempotencyKey: string;
 }
 
-export interface ReadMessagesResult {
-  messages: InboxMessage[];
-  nextCursor: number;
-}
-
 export type InboxStatusResult = OperationResult<InboxStatus>;
 export type MessageResult = OperationResult<InboxMessage>;
-export type MessagesResult = OperationResult<ReadMessagesResult>;
+export type MessagesResult = OperationResult<ReadInboxResult>;
