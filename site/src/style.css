@@ -115,6 +115,15 @@ a:focus-visible {
   opacity: 1;
 }
 
+.site-header nav .github-link {
+  background: var(--cream);
+  border-radius: 999px;
+  color: var(--ink);
+  font-weight: 600;
+  opacity: 1;
+  padding: 10px 18px;
+}
+
 .hero {
   background:
     radial-gradient(circle at 73% 40%, rgba(43, 126, 217, 0.24), transparent 29%),
