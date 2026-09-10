@@ -6,12 +6,12 @@
     <meta name="theme-color" content="#05101f" />
     <meta
       name="description"
-      content="Inboxlet gives agents tiny, disposable email inboxes on Cloudflare. Create, wait, reply, and let them disappear."
+      content="Temporary email inboxes for AI agents and automation. Receive verification codes, sign-in links, and replies through a CLI, TypeScript SDK, MCP, or REST API. Self-host on Cloudflare."
     />
-    <meta property="og:title" content="Inboxlet - tiny email for agents" />
+    <meta property="og:title" content="Inboxlet - temporary email for AI agents" />
     <meta
       property="og:description"
-      content="Ephemeral email identity for agents and automation. Open source and Cloudflare-native."
+      content="Give your agent an email address to receive verification codes, sign-in links, and replies. Open source. Self-hosted on Cloudflare."
     />
     <meta property="og:image" content="https://inboxlet.dev/avatar.png" />
     <meta property="og:type" content="website" />
@@ -23,7 +23,7 @@
       rel="stylesheet"
     />
     <link rel="icon" href="/mark.svg" type="image/svg+xml" />
-    <title>Inboxlet - tiny email for agents</title>
+    <title>Inboxlet - temporary email for AI agents</title>
   </head>
   <body>
     <header class="site-header">
@@ -39,7 +39,9 @@
       <nav aria-label="Main navigation">
         <a href="#how">How it works</a>
         <a href="#quickstart">Quick start</a>
-        <a href="https://github.com/bndnsmth/inboxlet">GitHub</a>
+        <a class="github-link" href="https://github.com/bndnsmth/inboxlet">
+          GitHub <span aria-hidden="true">-&gt;</span>
+        </a>
       </nav>
     </header>
 
@@ -48,22 +50,23 @@
         <div class="hero-stars" aria-hidden="true"></div>
         <div class="hero-inner">
           <div class="hero-copy">
-            <p class="eyebrow intro-item">Cloudflare-native. Agent-ready. Open source.</p>
-            <h1 class="intro-item">Tiny email.<br /><span>Big agent energy.</span></h1>
+            <p class="eyebrow intro-item">Open source. Self-hosted on Cloudflare.</p>
+            <h1 class="intro-item">Temporary email.<br /><span>For AI agents.</span></h1>
             <p class="hero-lede intro-item">
-              Disposable inboxes as a primitive. Create one, catch the message, reply if you need
-              to, then let it vanish.
+              Give your agent an email address to receive verification codes, sign-in links, and
+              replies. Create an inbox for each task, read or send email from your code, and delete
+              it automatically when it expires.
             </p>
             <div class="hero-actions intro-item">
-              <a class="button button-primary" href="#quickstart">Make a little inbox</a>
+              <a class="button button-primary" href="#quickstart">Get started</a>
               <a class="text-link" href="https://github.com/bndnsmth/inboxlet">
-                Read the source <span aria-hidden="true">-&gt;</span>
+                Get the code on GitHub <span aria-hidden="true">-&gt;</span>
               </a>
             </div>
             <ul class="hero-notes intro-item" aria-label="Product highlights">
-              <li>One Durable Object per inbox</li>
-              <li>CLI, TypeScript, and remote MCP</li>
-              <li>Hard-deletes on expiry</li>
+              <li>CLI, TypeScript SDK, MCP, and REST API</li>
+              <li>Separate access token for each inbox</li>
+              <li>Inboxes and messages deleted on expiry</li>
             </ul>
           </div>
 
@@ -81,8 +84,8 @@
               alt="Inboxlet, a smiling tiny mailbox holding an envelope"
             />
             <figcaption class="address-ticket">
-              <span class="address-label">Your tiny inbox</span>
-              <code>keen-otter-7k2m4p9x@mail.inboxlet.dev</code>
+              <span class="address-label">Example inbox on your domain</span>
+              <code>keen-otter-7k2m4p9x@mail.example.com</code>
               <span class="waiting"><i aria-hidden="true"></i> waiting for mail</span>
             </figcaption>
           </figure>
@@ -95,11 +98,11 @@
       <section class="how-section" id="how">
         <div class="section-shell">
           <div class="section-heading reveal">
-            <p class="section-number">01 / LITTLE BY DESIGN</p>
-            <h2>An inbox that<br />leaves no crumbs.</h2>
+            <p class="section-number">01 / HOW IT WORKS</p>
+            <h2>Create an inbox.<br />Receive your email.</h2>
             <p>
-              Friendly on the outside. Capability-secured, strongly consistent, and ephemeral
-              underneath.
+              Use a new address for each automated task. Your agent can wait for incoming email and
+              read it without a person opening a mailbox.
             </p>
           </div>
 
@@ -107,24 +110,32 @@
             <li class="reveal">
               <span class="route-number">01</span>
               <div>
-                <h3>Create</h3>
-                <p>Get a friendly address and a private capability in one API call.</p>
+                <h3>Create an address</h3>
+                <p>
+                  Get an email address and a private access token. Choose how long the inbox lasts.
+                </p>
                 <code>inboxlet create --ttl 1h</code>
               </div>
             </li>
             <li class="reveal">
               <span class="route-number">02</span>
               <div>
-                <h3>Wait</h3>
-                <p>Pause your workflow until the verification, reply, or notification arrives.</p>
+                <h3>Read incoming email</h3>
+                <p>
+                  Use the address in your workflow, then wait for a verification code, link, or
+                  reply.
+                </p>
                 <code>inboxlet read --wait 5m</code>
               </div>
             </li>
             <li class="reveal">
               <span class="route-number">03</span>
               <div>
-                <h3>Disappear</h3>
-                <p>Delete it now or let its alarm erase every message when time is up.</p>
+                <h3>Delete when done</h3>
+                <p>
+                  Delete the inbox and its messages now, or let them be deleted automatically on
+                  expiry.
+                </p>
                 <code>inboxlet delete --yes</code>
               </div>
             </li>
@@ -136,19 +147,17 @@
         <div class="quickstart-glow" aria-hidden="true"></div>
         <div class="quickstart-shell">
           <div class="quickstart-intro reveal">
-            <p class="section-number section-number-light">02 / PICK YOUR DOOR</p>
-            <h2>From zero to<br />inbox in a minute.</h2>
+            <p class="section-number section-number-light">02 / QUICK START</p>
+            <h2>Deploy once.<br />Create inboxes on demand.</h2>
             <p>
-              Deploy your own server, set one API key, and use whichever interface your agent
-              already speaks.
+              First, deploy Inboxlet to your Cloudflare account and configure email on your domain
+              using the setup steps below. Then use your server URL and API key in these examples.
             </p>
-            <a class="deploy-button" href="https://github.com/bndnsmth/inboxlet">
-              <img
-                src="https://deploy.workers.cloudflare.com/button"
-                alt="Deploy to Cloudflare"
-                width="184"
-                height="39"
-              />
+            <a
+              class="button button-primary"
+              href="https://github.com/bndnsmth/inboxlet#deploy-on-cloudflare"
+            >
+              Follow the setup guide
             </a>
           </div>
 
@@ -196,7 +205,8 @@
               <pre><code></code></pre>
             </div>
             <p class="code-note">
-              The server API key creates inboxes. Each inbox gets its own short-lived capability.
+              Requires your own deployment. CLI and SDK: Node.js 22.18+. The server API key creates
+              inboxes; each inbox has a separate access token. The MCP example uses OpenCode config.
             </p>
           </div>
         </div>
@@ -205,11 +215,11 @@
       <section class="setup-section" id="email-setup">
         <div class="setup-shell">
           <div class="setup-heading reveal">
-            <p class="section-number">03 / CONNECT THE PIPES</p>
-            <h2>Give it ears.<br />Give it a voice.</h2>
+            <p class="section-number">03 / EMAIL SETUP</p>
+            <h2>Connect your<br />email domain.</h2>
             <p>
-              Deploying gets the Worker online. Two Cloudflare email switches connect it to the
-              outside world.
+              Inboxlet runs in your Cloudflare account. Configure Email Routing to receive messages
+              and Email Sending to send messages and replies.
             </p>
           </div>
 
@@ -218,7 +228,7 @@
               <span class="setup-number">01</span>
               <div>
                 <p class="setup-kicker">Pick a domain</p>
-                <h3>Set the address.</h3>
+                <h3>Choose your email domain</h3>
                 <p>Choose a Cloudflare-managed domain and set <code>MAIL_DOMAIN</code>.</p>
                 <code class="setup-command">mail.yourdomain.com</code>
               </div>
@@ -242,8 +252,11 @@
                   <span>Cloudflare Email Routing</span>
                   <span aria-hidden="true">-&gt;</span>
                 </a>
-                <h3>Catch every inbox.</h3>
-                <p>Onboard the domain, then send its catch-all rule to your Inboxlet Worker.</p>
+                <h3>Receive incoming email</h3>
+                <p>
+                  Enable Email Routing, then route the inbox subdomain's catch-all address to your
+                  Inboxlet Worker.
+                </p>
                 <code class="setup-command">catch-all -&gt; Worker: inboxlet</code>
               </div>
             </li>
@@ -266,8 +279,11 @@
                   <span>Cloudflare Email Sending</span>
                   <span aria-hidden="true">-&gt;</span>
                 </a>
-                <h3>Wire up replies.</h3>
-                <p>Onboard the same domain. The <code>EMAIL</code> binding is already included.</p>
+                <h3>Enable sending and replies</h3>
+                <p>
+                  Enable Email Sending for your mail domain. The <code>EMAIL</code> binding is
+                  included in the deployment config.
+                </p>
                 <code class="setup-command">EMAIL -&gt; send_email</code>
               </div>
             </li>
@@ -288,15 +304,16 @@
           <strong>60m</strong>
         </div>
         <div class="final-copy reveal">
-          <p class="section-number">04 / SEND THE AGENT</p>
-          <h2>A little inbox,<br />right when you need one.</h2>
+          <p class="section-number">04 / BUILT FOR AUTOMATION</p>
+          <h2>Automate the<br />email step.</h2>
           <p>
-            Built for sign-ups, verification links, approvals, notifications, and tiny adventures.
+            Test sign-up flows, retrieve sign-in links, or wait for an approval by email. Give each
+            workflow its own inbox with a lifetime you control.
           </p>
           <div class="final-actions">
-            <a class="button button-dark" href="#quickstart">Start tiny</a>
+            <a class="button button-dark" href="#quickstart">Get started</a>
             <a class="text-link text-link-dark" href="https://github.com/bndnsmth/inboxlet">
-              Star on GitHub <span aria-hidden="true">-&gt;</span>
+              View on GitHub <span aria-hidden="true">-&gt;</span>
             </a>
           </div>
         </div>
@@ -313,7 +330,7 @@
         </svg>
         inboxlet
       </a>
-      <p>Tiny email infrastructure for agents.</p>
+      <p>Temporary email inboxes for agents and automation.</p>
       <p>MIT licensed. <span id="year"></span></p>
     </footer>
 

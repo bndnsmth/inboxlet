@@ -10,10 +10,8 @@ inboxlet config \\
   --api-key "$INBOXLET_API_KEY"
 
 inboxlet create --ttl 1h
-inboxlet send \
-  --to you@example.com \
-  --subject "Hello, world!" \
-  --text "Sent from Inboxlet."`,
+# Use the returned address in your workflow.
+inboxlet read --wait 5m`,
   },
   typescript: {
     language: "typescript",
@@ -25,11 +23,10 @@ Inbox.configure({
 });
 
 const inbox = await Inbox.create({ ttl: "1h" });
-await inbox.send({
-  to: "you@example.com",
-  subject: "Hello, world!",
-  text: "Sent from Inboxlet.",
-});`,
+// Use this address in your sign-up or test flow.
+console.log(inbox.address);
+const message = await inbox.wait({ timeout: "5m" });
+console.log(message);`,
   },
   mcp: {
     language: "opencode.jsonc",
